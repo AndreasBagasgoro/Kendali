@@ -1,91 +1,100 @@
-# =============================================================================
-# Stage 1: base — shared pnpm + Node image
-# =============================================================================
+# ============================================================
+# Stage 1: Base — Alpine Node + pnpm
+# ============================================================
 FROM node:22-alpine AS base
 
-# Install pnpm via corepack (bundled with Node 22, no extra download needed)
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm globally
+RUN corepack enable && corepack prepare pnpm@11.15.1 --activate
 
 WORKDIR /app
 
-# =============================================================================
-# Stage 2: deps — install ALL workspace dependencies (prod + dev)
-# Scope: only manifests & lockfile so Docker layer cache is maximised
-# =============================================================================
+
+# ============================================================
+# Stage 2: Dependencies — install all workspace deps
+# ============================================================
 FROM base AS deps
 
-# Copy monorepo manifests first (cache-friendly)
-COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+# Copy workspace manifests first (layer caching)
+COPY pnpm-workspace.yaml ./
 COPY package.json ./
+COPY pnpm-lock.yaml ./
 
-# Copy each workspace package manifest
+# Copy each app/package manifest for workspace linking
+COPY apps/api/package.json ./apps/api/
 COPY packages/shared-schema/package.json ./packages/shared-schema/
-COPY apps/api/package.json                ./apps/api/
 
-# Install everything (prod + dev) needed to build
+# Install all dependencies (including devDeps for build)
 RUN pnpm install --frozen-lockfile
 
-# =============================================================================
-# Stage 3: builder — compile TypeScript
-# =============================================================================
+
+# ============================================================
+# Stage 3: Builder — compile TypeScript
+# ============================================================
 FROM deps AS builder
 
-# Copy full source after deps are installed (layer cache reused above)
+# Copy shared package source
 COPY packages/shared-schema/ ./packages/shared-schema/
-COPY apps/api/               ./apps/api/
 
-# Build shared-schema first, then the API
-RUN pnpm --filter @kendali/shared-schema build 2>/dev/null || true
-RUN pnpm --filter kendali-be build:ts
+# Copy API source
+COPY apps/api/ ./apps/api/
 
-# =============================================================================
-# Stage 4: runner — lean production image
-# Only compiled JS + production node_modules, no dev deps, no src
-# =============================================================================
-FROM base AS runner
+# Build shared package first (if it has a build step)
+RUN pnpm --filter @kendali/shared-schema run --if-present build
 
-# Install dumb-init for proper PID-1 / signal handling in containers
-RUN apk add --no-cache dumb-init
+# Build the API (tsc → dist/)
+RUN pnpm --filter api build:ts
 
-# Run as non-root for security
-RUN addgroup -S kendali && adduser -S kendali -G kendali
-USER kendali
+
+# ============================================================
+# Stage 4: Production deps only
+# ============================================================
+FROM base AS prod-deps
+
+COPY pnpm-workspace.yaml ./
+COPY package.json ./
+COPY pnpm-lock.yaml ./
+COPY apps/api/package.json ./apps/api/
+COPY packages/shared-schema/package.json ./packages/shared-schema/
+
+# Install production dependencies only
+RUN pnpm install --frozen-lockfile --prod
+
+
+# ============================================================
+# Stage 5: Runner — lean production image
+# ============================================================
+FROM node:22-alpine AS runner
+
+RUN corepack enable && corepack prepare pnpm@11.15.1 --activate
+
+# Create non-root user for security
+RUN addgroup --system --gid 1001 nodejs \
+ && adduser  --system --uid 1001 fastify
 
 WORKDIR /app
 
-# Copy pnpm store manifests (needed to prune)
-COPY --chown=kendali:kendali pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY --chown=kendali:kendali package.json ./
-COPY --chown=kendali:kendali packages/shared-schema/package.json ./packages/shared-schema/
-COPY --chown=kendali:kendali apps/api/package.json               ./apps/api/
-
-# Copy node_modules from builder, then prune to prod-only
-COPY --chown=kendali:kendali --from=builder /app/node_modules          ./node_modules
-COPY --chown=kendali:kendali --from=builder /app/apps/api/node_modules ./apps/api/node_modules
-
-# Remove dev dependencies in-place
-RUN pnpm prune --prod 2>/dev/null || true
+# Copy production node_modules from prod-deps stage
+COPY --from=prod-deps /app/node_modules             ./node_modules
+COPY --from=prod-deps /app/apps/api/node_modules    ./apps/api/node_modules
 
 # Copy compiled output
-COPY --chown=kendali:kendali --from=builder /app/apps/api/dist              ./apps/api/dist
-COPY --chown=kendali:kendali --from=builder /app/packages/shared-schema/dist ./packages/shared-schema/dist 2>/dev/null || true
+COPY --from=builder /app/apps/api/dist              ./apps/api/dist
 
-# Volume mount point for SQLite data file (persists across container restarts)
-VOLUME ["/app/apps/api/data"]
+# Copy package manifests needed at runtime
+COPY --from=builder /app/apps/api/package.json      ./apps/api/package.json
+COPY --from=builder /app/packages/shared-schema     ./packages/shared-schema
 
-# Expose API port (default Fastify port, override via PORT env)
+# Switch to non-root user
+USER fastify
+
+WORKDIR /app/apps/api
+
+# Expose API port (default Fastify port)
 EXPOSE 3000
 
-# Environment defaults (override at runtime with --env / Railway/Render env vars)
-ENV NODE_ENV=production \
-    PORT=3000 \
-    HOST=0.0.0.0
+# Health-check — adjust path/port to match your actual health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:3000/health || exit 1
 
-# Health-check: hit the /api/v1/health endpoint
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget -qO- http://localhost:${PORT}/api/v1/health || exit 1
-
-# Use dumb-init so Node receives SIGTERM cleanly (graceful shutdown)
-ENTRYPOINT ["dumb-init", "--"]
-
-CMD ["node", "apps/api/dist/server.js"]
+# Start the compiled app
+CMD ["node", "dist/server.js"]

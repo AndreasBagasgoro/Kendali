@@ -1,0 +1,94 @@
+# ============================================================
+# .dockerignore — Kendali Monorepo
+# Build context: project root (c:\Users\Andreas\Project\Kendali)
+# ============================================================
+
+# ── Git & IDE ──────────────────────────────────────────────
+.git
+.gitignore
+.github
+.vscode
+.idea
+*.iml
+
+# ── Node modules (rebuilt inside Docker) ──────────────────
+node_modules
+apps/*/node_modules
+packages/*/node_modules
+
+# ── Build outputs (rebuilt inside Docker) ──────────────────
+dist
+apps/*/dist
+packages/*/dist
+*.tsbuildinfo
+
+# ── Logs ───────────────────────────────────────────────────
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── Test & Coverage ────────────────────────────────────────
+coverage
+*.lcov
+.nyc_output
+test
+apps/*/test
+
+# ── Environment files (inject via Docker env vars / secrets) ──
+.env
+.env.*
+!.env.example
+
+# ── OS & editor artifacts ──────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── Cache directories ──────────────────────────────────────
+.cache
+.parcel-cache
+.turbo
+.eslintcache
+.rpt2_cache
+.rts2_cache_cjs
+.rts2_cache_es
+.rts2_cache_umd
+.npm
+
+# ── Runtime / diagnostic ───────────────────────────────────
+pids
+*.pid
+*.seed
+*.pid.lock
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# ── Package manager artifacts ──────────────────────────────
+.yarn-integrity
+.node_repl_history
+*.tgz
+jspm_packages
+bower_components
+.lock-wscript
+
+# ── Database files ─────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+
+# ── Next.js / Nuxt / Gatsby / Vite build artifacts ─────────
+.next
+.nuxt
+.vuepress/dist
+.serverless
+.fusebox
+.dynamodb
+
+# ── Documentation & non-runtime files ─────────────────────
+*.md
+!README.md
+docs

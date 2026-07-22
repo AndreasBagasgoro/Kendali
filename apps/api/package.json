@@ -1,5 +1,5 @@
 {
-  "name": "kendali-be",
+  "name": "api",
   "version": "1.0.0",
   "description": "This project was bootstrapped with Fastify-CLI.",
   "main": "app.ts",
@@ -22,6 +22,8 @@
     "fastify-plugin": "^5.0.0",
     "@fastify/autoload": "^6.0.0",
     "@fastify/sensible": "^6.0.0",
+    "@fastify/cors": "^10.0.0",
+    "@fastify/static": "^8.0.0",
     "fastify-cli": "^8.0.0",
     "@kendali/shared-schema": "workspace:*"
   },
