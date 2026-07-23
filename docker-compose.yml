@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: .                          # Build dari root monorepo
+      dockerfile: apps/api/Dockerfile
+    image: kendali-api:latest
+    container_name: kendali-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - apps/api/.env                     # Buat dari apps/api/.env.example
+    environment:
+      NODE_ENV: production
+      HOST: "0.0.0.0"
+      PORT: "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

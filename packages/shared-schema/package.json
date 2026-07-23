@@ -1,0 +1,15 @@
+{
+  "name": "@kendali/shared-schema",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared Zod schemas untuk apps/api dan apps/web",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {},
+  "devDependencies": {
+    "typescript": "~5.9.2"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}

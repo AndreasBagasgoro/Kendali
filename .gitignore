@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+apps/*/node_modules/
+packages/*/node_modules/
+
+# Build outputs
+dist/
+build/
+apps/*/dist/
+apps/*/build/
+packages/*/dist/
+packages/*/build/
+*.tsbuildinfo
+
+# Caches
+.cache/
+.turbo/
+.vite/
+.eslintcache
+.nyc_output/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
