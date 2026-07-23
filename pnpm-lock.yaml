@@ -29,9 +29,6 @@ importers:
       '@fastify/static':
         specifier: ^8.0.0
         version: 8.3.0
-      '@kendali/shared-schema':
-        specifier: workspace:*
-        version: link:../../packages/shared-schema
       fastify:
         specifier: ^5.0.0
         version: 5.10.0
@@ -76,9 +73,6 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.7.0(supports-color@8.1.1))
-      '@kendali/shared-schema':
-        specifier: workspace:*
-        version: link:../../packages/shared-schema
       '@rolldown/plugin-babel':
         specifier: ^0.2.3
         version: 0.2.3(@babel/core@7.29.7(supports-color@8.1.1))(rolldown@1.1.5)(vite@8.1.5(@types/node@24.13.3))

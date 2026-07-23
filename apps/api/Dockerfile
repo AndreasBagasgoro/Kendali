@@ -1,100 +1,49 @@
 # ============================================================
-# Stage 1: Base — Alpine Node + pnpm
+# Stage 1: Base
 # ============================================================
 FROM node:22-alpine AS base
-
-# Install pnpm globally
-RUN corepack enable && corepack prepare pnpm@11.15.1 --activate
-
+RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
-
 # ============================================================
-# Stage 2: Dependencies — install all workspace deps
+# Stage 2: Dependencies (install semua, termasuk dev, untuk build)
 # ============================================================
 FROM base AS deps
-
-# Copy workspace manifests first (layer caching)
-COPY pnpm-workspace.yaml ./
-COPY package.json ./
-COPY pnpm-lock.yaml ./
-
-# Copy each app/package manifest for workspace linking
-COPY apps/api/package.json ./apps/api/
-COPY packages/shared-schema/package.json ./packages/shared-schema/
-
-# Install all dependencies (including devDeps for build)
-RUN pnpm install --frozen-lockfile
-
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY packages/shared-schema/package.json packages/shared-schema/
+RUN pnpm --dir apps/api install --frozen-lockfile
 
 # ============================================================
-# Stage 3: Builder — compile TypeScript
+# Stage 3: Builder
 # ============================================================
 FROM deps AS builder
-
-# Copy shared package source
-COPY packages/shared-schema/ ./packages/shared-schema/
-
-# Copy API source
-COPY apps/api/ ./apps/api/
-
-# Build shared package first (if it has a build step)
-RUN pnpm --filter @kendali/shared-schema run --if-present build
-
-# Build the API (tsc → dist/)
-RUN pnpm --filter api build:ts
-
+COPY . ./
+RUN pnpm --dir apps/api build:ts
 
 # ============================================================
-# Stage 4: Production deps only
+# Stage 4: Deploy — flatten deps tanpa symlink menggunakan pnpm deploy
 # ============================================================
-FROM base AS prod-deps
-
-COPY pnpm-workspace.yaml ./
-COPY package.json ./
-COPY pnpm-lock.yaml ./
-COPY apps/api/package.json ./apps/api/
-COPY packages/shared-schema/package.json ./packages/shared-schema/
-
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
-
+FROM builder AS deployer
+RUN pnpm --filter api deploy --prod --legacy /app/deployed
 
 # ============================================================
 # Stage 5: Runner — lean production image
 # ============================================================
 FROM node:22-alpine AS runner
-
-RUN corepack enable && corepack prepare pnpm@11.15.1 --activate
-
-# Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs \
  && adduser  --system --uid 1001 fastify
-
 WORKDIR /app
 
-# Copy production node_modules from prod-deps stage
-COPY --from=prod-deps /app/node_modules             ./node_modules
-COPY --from=prod-deps /app/apps/api/node_modules    ./apps/api/node_modules
+# Copy deployed output (real files, no symlinks)
+COPY --from=deployer /app/deployed/node_modules ./node_modules
+COPY --from=deployer /app/deployed/dist ./dist
+COPY --from=deployer /app/deployed/package.json ./package.json
 
-# Copy compiled output
-COPY --from=builder /app/apps/api/dist              ./apps/api/dist
-
-# Copy package manifests needed at runtime
-COPY --from=builder /app/apps/api/package.json      ./apps/api/package.json
-COPY --from=builder /app/packages/shared-schema     ./packages/shared-schema
-
-# Switch to non-root user
 USER fastify
-
-WORKDIR /app/apps/api
-
-# Expose API port (default Fastify port)
 EXPOSE 3000
 
-# Health-check — adjust path/port to match your actual health endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:3000/health || exit 1
+  CMD wget -qO- http://localhost:3000/api/v1/health || exit 1
 
-# Start the compiled app
-CMD ["node", "dist/server.js"]
+CMD ["node", "node_modules/fastify-cli/cli.js", "start", "-l", "info", "-a", "0.0.0.0", "dist/app.js"]
